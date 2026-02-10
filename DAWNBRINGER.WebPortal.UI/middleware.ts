@@ -6,6 +6,17 @@ const publicPaths = ["/", "/login", "/verify", "/pending-verification", "/api/au
 export default auth((request) => {
     const { pathname } = request.nextUrl;
 
+    // Redirect Authenticated Users Away From Login Page
+    if (pathname === "/login" && request.auth?.user) {
+        if (!request.auth.user.userID) {
+            return NextResponse.redirect(new URL("/register", request.url));
+        }
+        if (!request.auth.user.isVerified) {
+            return NextResponse.redirect(new URL("/pending-verification", request.url));
+        }
+        return NextResponse.redirect(new URL("/dashboard", request.url));
+    }
+
     // Allow Public Paths And Static Assets
     const isPublicPath = publicPaths.some((path) =>
         pathname === path || pathname.startsWith(`${path}/`)

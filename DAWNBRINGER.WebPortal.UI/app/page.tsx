@@ -1,24 +1,16 @@
 import Link from "next/link";
-import { Shield, Swords, Users, Github, ArrowRight, Zap, Globe, Lock } from "lucide-react";
+import { Shield, Swords, Users, Github, ArrowRight, Zap, Globe, Lock, LayoutDashboard } from "lucide-react";
+import { auth } from "@/lib/auth";
+import { HomeNavbar } from "@/components/layout/home-navbar";
 
-export default function HomePage() {
+export default async function HomePage() {
+    const session = await auth();
+    const isLoggedIn = !!session?.user;
+
     return (
-        <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden">
-            <div className="pointer-events-none absolute inset-0">
-                <div className="absolute left-1/2 top-0 -translate-x-1/2 h-[800px] w-[1000px] rounded-full bg-emerald-500/[0.07] blur-[150px]" />
-                <div className="absolute bottom-0 left-0 h-[500px] w-[500px] rounded-full bg-emerald-600/[0.04] blur-[120px]" />
-                <div className="absolute right-0 top-1/4 h-[400px] w-[400px] rounded-full bg-teal-600/[0.03] blur-[100px]" />
-                <div className="absolute left-1/4 bottom-1/4 h-[300px] w-[300px] rounded-full bg-cyan-600/[0.02] blur-[80px]" />
-            </div>
-
-            <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.015)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.015)_1px,transparent_1px)] bg-[size:72px_72px] [mask-image:radial-gradient(ellipse_at_center,black_20%,transparent_70%)]" />
-
-            <div className="pointer-events-none absolute top-20 left-20 h-1.5 w-1.5 rounded-full bg-emerald-500/40 animate-pulse-glow" />
-            <div className="pointer-events-none absolute top-40 right-32 h-1 w-1 rounded-full bg-emerald-400/30 animate-pulse-glow [animation-delay:1s]" />
-            <div className="pointer-events-none absolute bottom-32 left-1/4 h-1.5 w-1.5 rounded-full bg-teal-500/30 animate-pulse-glow [animation-delay:2s]" />
-            <div className="pointer-events-none absolute top-1/3 right-1/4 h-1 w-1 rounded-full bg-emerald-500/20 animate-pulse-glow [animation-delay:0.5s]" />
-
-            <main className="relative z-10 flex flex-col items-center gap-16 px-6 py-20 text-center">
+        <div className="relative flex min-h-screen flex-col">
+            <HomeNavbar />
+            <main className="relative z-10 flex flex-1 flex-col items-center justify-center gap-16 px-6 py-20 text-center">
                 <div className="flex flex-col items-center gap-8 animate-fade-in">
                     <div className="group relative flex h-20 w-20 items-center justify-center rounded-2xl border border-emerald-500/20 bg-emerald-500/10 glow-md float">
                         <Swords className="h-10 w-10 text-emerald-500 transition-transform duration-300 group-hover:scale-110" />
@@ -70,15 +62,27 @@ export default function HomePage() {
 
                 <div className="flex flex-col items-center gap-6 animate-fade-in [animation-delay:0.3s]">
                     <div className="flex flex-col items-center gap-4 sm:flex-row">
-                        <Link
-                            href="/login"
-                            className="group relative inline-flex h-13 items-center justify-center gap-3 overflow-hidden rounded-2xl bg-emerald-600 px-10 text-sm font-semibold text-white shadow-lg shadow-emerald-500/25 transition-all duration-300 hover:bg-emerald-500 hover:shadow-emerald-500/35 hover:scale-[1.02] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 focus-visible:ring-offset-background cursor-pointer"
-                        >
-                            <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/10 to-white/0 translate-x-[-200%] group-hover:translate-x-[200%] transition-transform duration-700" />
-                            <DiscordIcon className="h-5 w-5" />
-                            Sign In with Discord
-                            <ArrowRight className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-1" />
-                        </Link>
+                        {isLoggedIn ? (
+                            <Link
+                                href="/dashboard"
+                                className="group relative inline-flex h-13 items-center justify-center gap-3 overflow-hidden rounded-2xl bg-emerald-600 px-10 text-sm font-semibold text-white shadow-lg shadow-emerald-500/25 transition-all duration-300 hover:bg-emerald-500 hover:shadow-emerald-500/35 hover:scale-[1.02] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 focus-visible:ring-offset-background cursor-pointer"
+                            >
+                                <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/10 to-white/0 translate-x-[-200%] group-hover:translate-x-[200%] transition-transform duration-700" />
+                                <LayoutDashboard className="h-5 w-5" />
+                                Go to Dashboard
+                                <ArrowRight className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-1" />
+                            </Link>
+                        ) : (
+                            <Link
+                                href="/login"
+                                className="group relative inline-flex h-13 items-center justify-center gap-3 overflow-hidden rounded-2xl bg-emerald-600 px-10 text-sm font-semibold text-white shadow-lg shadow-emerald-500/25 transition-all duration-300 hover:bg-emerald-500 hover:shadow-emerald-500/35 hover:scale-[1.02] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 focus-visible:ring-offset-background cursor-pointer"
+                            >
+                                <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/10 to-white/0 translate-x-[-200%] group-hover:translate-x-[200%] transition-transform duration-700" />
+                                <DiscordIcon className="h-5 w-5" />
+                                Sign In with Discord
+                                <ArrowRight className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-1" />
+                            </Link>
+                        )}
                         <a
                             href="https://github.com/Project-KONGOR-Open-Source/NEXUS"
                             target="_blank"

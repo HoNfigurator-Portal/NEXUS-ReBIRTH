@@ -4,19 +4,24 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { useState } from "react";
-import { Swords, LayoutDashboard, UserCircle, GamepadIcon, LogOut, Menu, X, ChevronDown } from "lucide-react";
+import { Swords, LayoutDashboard, UserCircle, GamepadIcon, LogOut, Menu, X, Home, Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Session } from "next-auth";
-
-const navigationItems = [
-    { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-    { href: "/profile", label: "Profile", icon: UserCircle },
-    { href: "/accounts", label: "Accounts", icon: GamepadIcon },
-];
 
 export function PortalNavbar({ session }: { session: Session }) {
     const pathname = usePathname();
     const [mobileOpen, setMobileOpen] = useState(false);
+
+    // Check if user is admin
+    const isAdmin = session.user.role === "admin";
+
+    const navigationItems = [
+        { href: "/", label: "Home", icon: Home },
+        { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+        { href: "/profile", label: "Profile", icon: UserCircle },
+        { href: "/accounts", label: "Accounts", icon: GamepadIcon },
+        ...(isAdmin ? [{ href: "/admin/dashboard", label: "Admin", icon: Shield }] : []),
+    ];
 
     return (
         <header className="sticky top-0 z-50 border-b border-border/50 bg-background/70 backdrop-blur-2xl">

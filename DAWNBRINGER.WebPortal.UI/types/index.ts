@@ -103,6 +103,7 @@ declare module "next-auth" {
             userID: number | null;
             isVerified: boolean;
             zorgathToken: string | null;
+            role: "user" | "admin" | null;
         };
     }
 }
@@ -117,5 +118,6 @@ declare module "@auth/core/jwt" {
         userID: number | null;
         isVerified: boolean;
         zorgathToken: string | null;
+        role: "user" | "admin" | null;
     }
 }
