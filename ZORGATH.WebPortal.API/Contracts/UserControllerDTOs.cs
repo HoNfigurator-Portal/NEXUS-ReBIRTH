@@ -8,4 +8,12 @@ public record GetBasicUserDTO(int ID, string EmailAddress, List<GetBasicAccountD
 
 public record GetBasicAccountDTO(int ID, string Name);
 
-public record GetAuthenticationTokenDTO(int UserID, string TokenType, string Token);
+public record GetAuthenticationTokenDTO(int UserID, string TokenType, string Token, bool IsVerified);
+
+public record RegisterDiscordUserDTO(string DiscordID, string DiscordUsername, string DiscordEmail, string? DiscordAvatarHash, string AccountName, string Password, string ConfirmPassword);
+
+public record GetDiscordUserDTO(int UserID, string DiscordID, string DiscordUsername, string? DiscordAvatarHash, string EmailAddress, bool IsVerified, List<GetBasicAccountDTO> Accounts);
+
+public record CheckAccountNameDTO(bool IsAvailable, string AccountName);
+
+public record LogInDiscordDTO(string DiscordID);

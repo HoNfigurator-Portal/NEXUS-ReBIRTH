@@ -226,6 +226,10 @@ public class ZORGATH
         // Add Email Service
         builder.Services.AddSingleton<IEmailService, EmailService>();
 
+        // Add Discord Bot Service
+        builder.Services.AddHttpClient();
+        builder.Services.AddSingleton<IDiscordBotService, DiscordBotService>();
+
         // Configure Forwarded Headers For Reverse Proxy Support
         builder.Services.Configure<ForwardedHeadersOptions>(options =>
         {

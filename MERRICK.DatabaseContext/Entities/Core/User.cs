@@ -1,6 +1,7 @@
 ﻿namespace MERRICK.DatabaseContext.Entities.Core;
 
 [Index(nameof(EmailAddress), IsUnique = true)]
+[Index(nameof(DiscordID), IsUnique = true)]
 public class User
 {
     [Key]
@@ -11,6 +12,15 @@ public class User
 
     public required Role Role { get; set; }
 
+    [MaxLength(20)]
+    public string? DiscordID { get; set; }
+
+    [MaxLength(32)]
+    public string? DiscordUsername { get; set; }
+
+    [MaxLength(128)]
+    public string? DiscordAvatarHash { get; set; }
+
     [StringLength(64)]
     public required string SRPPasswordSalt { get; set; }
 
@@ -19,6 +29,8 @@ public class User
 
     [StringLength(84)]
     public string PBKDF2PasswordHash { get; set; } = null!;
+
+    public bool IsVerified { get; set; } = false;
 
     public List<Account> Accounts { get; set; } = [];
 

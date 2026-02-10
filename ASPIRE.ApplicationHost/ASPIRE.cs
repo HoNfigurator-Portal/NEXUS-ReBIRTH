@@ -118,10 +118,25 @@ public class ASPIRE
             .WithEnvironment("CHAT_SERVER_PORT_MATCH_SERVER_MANAGER", chatServerMatchServerManagerConnectionsPort.ToString())
             .WithEnvironment("INFRASTRUCTURE_GATEWAY", gateway);
 
+        // Set Discord Bot Token Parameter Name And Environment Variable Name
+        const string discordBotTokenParameterName = "discord-bot-token";
+        const string discordBotTokenEnvironmentVariableName = "DISCORD_BOT_TOKEN";
+
+        // Attempt To Resolve Discord Bot Token From Configuration In Order Of Priority: 1) User Secrets, 2) Environment Variables
+        string? resolvedDiscordBotToken = configuration[$"Parameters:{discordBotTokenParameterName}"] ?? configuration[discordBotTokenEnvironmentVariableName];
+
         // Add Web Portal API Project
-        builder.AddProject<ZORGATH>("web-portal-api", builder.Environment.IsProduction() ? "ZORGATH.WebPortal.API Production" : "ZORGATH.WebPortal.API Development")
+        IResourceBuilder<ProjectResource> webPortalAPI = builder.AddProject<ZORGATH>("web-portal-api", builder.Environment.IsProduction() ? "ZORGATH.WebPortal.API Production" : "ZORGATH.WebPortal.API Development")
             .WithReference(database, connectionName: "MERRICK").WaitFor(database) // Connect To SQL Server Database And Wait For It To Start
-            .WithEnvironment("INFRASTRUCTURE_GATEWAY", gateway);
+            .WithEnvironment("INFRASTRUCTURE_GATEWAY", gateway)
+            .WithEnvironment("Operational__DiscordBot__BotToken", resolvedDiscordBotToken ?? "");
+
+        // Add Web Portal UI Project (Next.js)
+        builder.AddJavaScriptApp("web-portal-ui", "../DAWNBRINGER.WebPortal.UI")
+            .WithHttpEndpoint(port: 5557, env: "PORT")
+            .WithExternalHttpEndpoints()
+            .WithEnvironment("NODE_TLS_REJECT_UNAUTHORIZED", builder.Environment.IsDevelopment() ? "0" : "1")
+            .WaitFor(webPortalAPI);
 
         // Start Orchestrating Distributed Application
         builder.Build().Run();

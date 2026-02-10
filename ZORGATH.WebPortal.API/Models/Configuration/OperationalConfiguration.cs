@@ -4,6 +4,13 @@ public class OperationalConfiguration
 {
     public const string ConfigurationSection = "Operational";
     public required OperationalConfigurationJWT JWT { get; set; }
+    public required OperationalConfigurationDiscordBot DiscordBot { get; set; }
+}
+
+public class OperationalConfigurationDiscordBot
+{
+    public required string BotToken { get; set; }
+    public required string VerificationBaseURL { get; set; }
 }
 
 public class OperationalConfigurationJWT

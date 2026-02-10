@@ -136,6 +136,18 @@ namespace MERRICK.DatabaseContext.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("ID"));
 
+                    b.Property<string>("DiscordAvatarHash")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<string>("DiscordID")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("DiscordUsername")
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
                     b.Property<string>("EmailAddress")
                         .IsRequired()
                         .HasMaxLength(30)
@@ -143,6 +155,9 @@ namespace MERRICK.DatabaseContext.Migrations
 
                     b.Property<int>("GoldCoins")
                         .HasColumnType("int");
+
+                    b.Property<bool>("IsVerified")
+                        .HasColumnType("bit");
 
                     b.PrimitiveCollection<string>("OwnedStoreItems")
                         .IsRequired()
@@ -185,6 +200,10 @@ namespace MERRICK.DatabaseContext.Migrations
                         .HasColumnType("int");
 
                     b.HasKey("ID");
+
+                    b.HasIndex("DiscordID")
+                        .IsUnique()
+                        .HasFilter("[DiscordID] IS NOT NULL");
 
                     b.HasIndex("EmailAddress")
                         .IsUnique();

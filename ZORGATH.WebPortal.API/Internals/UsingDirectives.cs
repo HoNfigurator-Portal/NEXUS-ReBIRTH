@@ -32,6 +32,7 @@ global using System.Runtime.CompilerServices;
 global using System.Security.Claims;
 global using System.Security.Cryptography;
 global using System.Text;
+global using System.Text.Json;
 global using System.Text.RegularExpressions;
 global using System.Threading.RateLimiting;
 
@@ -41,5 +42,6 @@ global using ZORGATH.WebPortal.API.Extensions;
 global using ZORGATH.WebPortal.API.Handlers;
 global using ZORGATH.WebPortal.API.Helpers;
 global using ZORGATH.WebPortal.API.Models.Configuration;
+global using ZORGATH.WebPortal.API.Services.Discord;
 global using ZORGATH.WebPortal.API.Services.Email;
 global using ZORGATH.WebPortal.API.Validators;

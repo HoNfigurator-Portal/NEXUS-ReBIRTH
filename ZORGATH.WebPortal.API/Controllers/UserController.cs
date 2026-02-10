@@ -4,11 +4,12 @@
 [Route("[controller]")]
 [Consumes("application/json")]
 [EnableRateLimiting(RateLimiterPolicies.Strict)]
-public class UserController(MerrickContext databaseContext, ILogger<UserController> logger, IEmailService emailService, IOptions<OperationalConfiguration> configuration, IWebHostEnvironment hostEnvironment) : ControllerBase
+public class UserController(MerrickContext databaseContext, ILogger<UserController> logger, IEmailService emailService, IDiscordBotService discordBotService, IOptions<OperationalConfiguration> configuration, IWebHostEnvironment hostEnvironment) : ControllerBase
 {
     private MerrickContext MerrickContext { get; } = databaseContext;
     private ILogger Logger { get; } = logger;
     private IEmailService EmailService { get; } = emailService;
+    private IDiscordBotService DiscordBotService { get; } = discordBotService;
     private OperationalConfiguration Configuration { get; } = configuration.Value;
     private IWebHostEnvironment HostEnvironment { get; } = hostEnvironment;
 
@@ -167,7 +168,7 @@ public class UserController(MerrickContext databaseContext, ILogger<UserControll
 
         string jwt = new JwtSecurityTokenHandler().WriteToken(token);
 
-        return Ok(new GetAuthenticationTokenDTO(user.ID, "JWT", jwt));
+        return Ok(new GetAuthenticationTokenDTO(user.ID, "JWT", jwt, user.IsVerified));
     }
 
     [HttpGet("{id}", Name = "Get User")]
@@ -207,5 +208,262 @@ public class UserController(MerrickContext databaseContext, ILogger<UserControll
         Logger.LogError(@"[BUG] Unknown User Role ""{User.Role}""", role);
 
         return BadRequest($@"Unknown User Role ""{role}""");
+    }
+
+    [HttpPost("LoginDiscord", Name = "Log In User Via Discord")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(GetAuthenticationTokenDTO), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(string), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(string), StatusCodes.Status422UnprocessableEntity)]
+    public async Task<IActionResult> LogInDiscordUser([FromBody] LogInDiscordDTO payload)
+    {
+        User? user = await MerrickContext.Users
+            .Include(record => record.Role)
+            .Include(record => record.Accounts).ThenInclude(record => record.Clan)
+            .SingleOrDefaultAsync(record => record.DiscordID != null && record.DiscordID.Equals(payload.DiscordID));
+
+        if (user is null)
+            return NotFound($@"User With Discord ID ""{payload.DiscordID}"" Was Not Found");
+
+        Account? account = user.Accounts.FirstOrDefault(account => account.IsMain) ?? user.Accounts.FirstOrDefault();
+
+        if (account is null)
+            return NotFound($@"User With Discord ID ""{payload.DiscordID}"" Has No Accounts");
+
+        if (new [] { UserRoles.Administrator, UserRoles.User }.Contains(user.Role.Name).Equals(false))
+        {
+            Logger.LogError(@"[BUG] Unknown User Role ""{User.Role.Name}""", user.Role.Name);
+
+            return UnprocessableEntity($@"Unknown User Role ""{user.Role.Name}""");
+        }
+
+        IEnumerable<Claim> userRoleClaims = user.Role.Name is UserRoles.Administrator ? UserRoleClaims.Administrator : UserRoleClaims.User;
+
+        IEnumerable<Claim> openIDClaims = new List<Claim>
+        {
+            new (JwtRegisteredClaimNames.Sub, account.Name, ClaimValueTypes.String),
+            new (JwtRegisteredClaimNames.Iat, DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(), ClaimValueTypes.Integer64),
+            new (JwtRegisteredClaimNames.AuthTime, DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(), ClaimValueTypes.Integer64),
+            new (JwtRegisteredClaimNames.Nonce, Guid.CreateVersion7().ToString(), ClaimValueTypes.String),
+            new (JwtRegisteredClaimNames.Jti, Guid.CreateVersion7().ToString(), ClaimValueTypes.String),
+            new (JwtRegisteredClaimNames.Email, user.EmailAddress, ClaimValueTypes.Email)
+        };
+
+        IEnumerable<Claim> customClaims = new List<Claim>
+        {
+            new (Claims.UserID, user.ID.ToString(), ClaimValueTypes.String),
+            new (Claims.AccountID, account.ID.ToString(), ClaimValueTypes.String),
+            new (Claims.AccountIsMain, account.IsMain.ToString(), ClaimValueTypes.Boolean),
+            new (Claims.ClanName, account.Clan?.Name ?? string.Empty, ClaimValueTypes.String),
+            new (Claims.ClanTag, account.Clan?.Tag ?? string.Empty, ClaimValueTypes.String)
+        };
+
+        IEnumerable<Claim> allTokenClaims = Enumerable.Empty<Claim>().Union(userRoleClaims).Union(openIDClaims).Union(customClaims).OrderBy(claim => claim.Type);
+
+        JwtSecurityToken token = new
+        (
+            issuer: Configuration.JWT.Issuer,
+            audience: Configuration.JWT.Audience,
+            claims: allTokenClaims,
+            expires: DateTimeOffset.UtcNow.AddHours(Configuration.JWT.DurationInHours).DateTime,
+            signingCredentials: new SigningCredentials(new SymmetricSecurityKey(Encoding.UTF8.GetBytes(Configuration.JWT.SigningKey)), SecurityAlgorithms.HmacSha256)
+        );
+
+        string jwt = new JwtSecurityTokenHandler().WriteToken(token);
+
+        return Ok(new GetAuthenticationTokenDTO(user.ID, "JWT", jwt, user.IsVerified));
+    }
+
+    [HttpGet("Discord/{discordId}", Name = "Get User By Discord ID")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(GetDiscordUserDTO), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(string), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetUserByDiscordID(string discordId)
+    {
+        User? user = await MerrickContext.Users
+            .Include(record => record.Accounts).ThenInclude(record => record.Clan)
+            .SingleOrDefaultAsync(record => record.DiscordID != null && record.DiscordID.Equals(discordId));
+
+        if (user is null)
+            return NotFound($@"User With Discord ID ""{discordId}"" Was Not Found");
+
+        return Ok(new GetDiscordUserDTO(
+            user.ID,
+            user.DiscordID!,
+            user.DiscordUsername ?? string.Empty,
+            user.DiscordAvatarHash,
+            user.EmailAddress,
+            user.IsVerified,
+            user.Accounts.Select(account => new GetBasicAccountDTO(account.ID, account.NameWithClanTag)).ToList()));
+    }
+
+    [HttpPost("RegisterDiscord", Name = "Register User Via Discord")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(GetDiscordUserDTO), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(string), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(IEnumerable<string>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(string), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> RegisterDiscordUser([FromBody] RegisterDiscordUserDTO payload)
+    {
+        if (payload.Password.Equals(payload.ConfirmPassword).Equals(false))
+            return BadRequest($@"Password ""{payload.ConfirmPassword}"" Does Not Match ""{payload.Password}"" (These Values Are Only Visible To You)");
+
+        if (HostEnvironment.IsDevelopment() is false)
+        {
+            ValidationResult result = await new PasswordValidator().ValidateAsync(payload.Password);
+
+            if (result.IsValid is false)
+                return BadRequest(result.Errors.Select(error => error.ErrorMessage));
+        }
+
+        if (await MerrickContext.Users.AnyAsync(user => user.DiscordID != null && user.DiscordID.Equals(payload.DiscordID)))
+        {
+            return Conflict($@"User With Discord ID ""{payload.DiscordID}"" Already Exists");
+        }
+
+        if (await MerrickContext.Accounts.AnyAsync(account => account.Name.Equals(payload.AccountName)))
+        {
+            return Conflict($@"Account With Name ""{payload.AccountName}"" Already Exists");
+        }
+
+        Role? role = await MerrickContext.Roles.SingleOrDefaultAsync(role => role.Name.Equals(UserRoles.User));
+
+        if (role is null)
+        {
+            return BadRequest($@"User Role ""{UserRoles.User}"" Was Not Found");
+        }
+
+        string salt = SRPRegistrationHandlers.GenerateSRPPasswordSalt();
+
+        User user = new()
+        {
+            EmailAddress = payload.DiscordEmail,
+            Role = role,
+            DiscordID = payload.DiscordID,
+            DiscordUsername = payload.DiscordUsername,
+            DiscordAvatarHash = payload.DiscordAvatarHash,
+            SRPPasswordSalt = salt,
+            SRPPasswordHash = SRPRegistrationHandlers.ComputeSRPPasswordHash(payload.Password, salt)
+        };
+
+        user.PBKDF2PasswordHash = new PasswordHasher<User>().HashPassword(user, payload.Password);
+
+        await MerrickContext.Users.AddAsync(user);
+
+        Account account = new()
+        {
+            Name = payload.AccountName,
+            User = user,
+            IsMain = true
+        };
+
+        user.Accounts.Add(account);
+
+        // Generate Verification Token
+        Token verificationToken = new()
+        {
+            Purpose = TokenPurpose.DiscordVerification,
+            EmailAddress = payload.DiscordEmail,
+            Value = Guid.CreateVersion7(),
+            Data = payload.DiscordID
+        };
+
+        await MerrickContext.Tokens.AddAsync(verificationToken);
+
+        await MerrickContext.SaveChangesAsync();
+
+        // Send Verification DM Via Discord Bot
+        await DiscordBotService.SendVerificationDM(payload.DiscordID, payload.AccountName, verificationToken.Value.ToString());
+
+        return CreatedAtAction(nameof(GetUser), new { id = user.ID },
+            new GetDiscordUserDTO(
+                user.ID,
+                user.DiscordID!,
+                user.DiscordUsername ?? string.Empty,
+                user.DiscordAvatarHash,
+                user.EmailAddress,
+                user.IsVerified,
+                [new GetBasicAccountDTO(account.ID, account.Name)]));
+    }
+
+    [HttpGet("CheckAccountName/{name}", Name = "Check Account Name Availability")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(CheckAccountNameDTO), StatusCodes.Status200OK)]
+    public async Task<IActionResult> CheckAccountName(string name)
+    {
+        bool exists = await MerrickContext.Accounts.AnyAsync(account => account.Name.Equals(name));
+
+        return Ok(new CheckAccountNameDTO(!exists, name));
+    }
+
+    [HttpGet("VerifyDiscord/{tokenValue}", Name = "Verify Discord Account")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(string), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(string), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(string), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> VerifyDiscordAccount(string tokenValue)
+    {
+        if (!Guid.TryParse(tokenValue, out Guid parsedToken))
+            return BadRequest("Invalid verification token format.");
+
+        Token? token = await MerrickContext.Tokens.SingleOrDefaultAsync(
+            t => t.Value == parsedToken && t.Purpose == TokenPurpose.DiscordVerification);
+
+        if (token is null)
+            return NotFound("Verification token was not found.");
+
+        if (token.TimestampConsumed is not null)
+            return Conflict("This verification token has already been used.");
+
+        User? user = await MerrickContext.Users.SingleOrDefaultAsync(
+            u => u.DiscordID != null && u.DiscordID.Equals(token.Data));
+
+        if (user is null)
+            return NotFound("User associated with this verification token was not found.");
+
+        user.IsVerified = true;
+        token.TimestampConsumed = DateTimeOffset.UtcNow;
+
+        await MerrickContext.SaveChangesAsync();
+
+        return Ok("Account verified successfully.");
+    }
+
+    [HttpPost("ResendVerification", Name = "Resend Discord Verification")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(string), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(string), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(string), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> ResendVerification([FromBody] LogInDiscordDTO payload)
+    {
+        User? user = await MerrickContext.Users
+            .Include(record => record.Accounts)
+            .SingleOrDefaultAsync(record => record.DiscordID != null && record.DiscordID.Equals(payload.DiscordID));
+
+        if (user is null)
+            return NotFound($@"User with Discord ID ""{payload.DiscordID}"" was not found.");
+
+        if (user.IsVerified)
+            return Conflict("User is already verified.");
+
+        Account? account = user.Accounts.FirstOrDefault(a => a.IsMain) ?? user.Accounts.FirstOrDefault();
+        string accountName = account?.Name ?? "Player";
+
+        // Generate New Verification Token
+        Token verificationToken = new()
+        {
+            Purpose = TokenPurpose.DiscordVerification,
+            EmailAddress = user.EmailAddress,
+            Value = Guid.CreateVersion7(),
+            Data = payload.DiscordID
+        };
+
+        await MerrickContext.Tokens.AddAsync(verificationToken);
+        await MerrickContext.SaveChangesAsync();
+
+        // Send Verification DM Via Discord Bot
+        await DiscordBotService.SendVerificationDM(payload.DiscordID, accountName, verificationToken.Value.ToString());
+
+        return Ok("Verification link has been resent to your Discord DM.");
     }
 }
